@@ -39,18 +39,6 @@ def none_if_blank(v: str | None):
     return v if v else None
 
 
-def gain_default(v) -> float:
-    """Take-profit/gain values must be >= 0; clamp any legacy/bad data so the
-    widget doesn't choke on an out-of-range initial value."""
-    return max(float(v or 0.0), 0.0)
-
-
-def loss_default(v) -> float:
-    """Stop-loss values must be <= 0; clamp any legacy/bad data so the
-    widget doesn't choke on an out-of-range initial value."""
-    return min(float(v or 0.0), 0.0)
-
-
 def render_ticker_feedback(checks) -> bool:
     """Shows validation results; returns True if OK to submit (final)."""
     ok_to_submit = True
@@ -72,10 +60,36 @@ def render_ticker_feedback(checks) -> bool:
 
 def trade_form(trade, section: str, team: str):
     t = dict(trade) if trade is not None else {}
+    key_suffix = f"{t.get('id', 'new')}_{t.get('trade_no')}"
 
     st.subheader(f"Trade #{t.get('trade_no')}")
 
-    with st.form(key=f"form_{t.get('id', 'new')}"):
+    # These two choices control which other fields appear below, so they
+    # must live OUTSIDE st.form: widgets inside a form don't trigger a
+    # rerun (and therefore don't update what's visible) until a submit
+    # button is clicked. Putting them here makes the form reactive --
+    # switching to "1 leg" immediately removes Leg 2 and the Joint option.
+    total_legs = st.radio(
+        "Trade legs", [1, 2], index=(t.get("total_legs") or 1) - 1, horizontal=True,
+        key=f"legs_{key_suffix}",
+    )
+
+    if total_legs == 1:
+        limit_mode = "Single leg"
+        st.caption(
+            "**Limit type: Single leg** -- the only option for a one-leg trade, since "
+            "a joint/whole-trade limit would be identical to a single-leg limit here."
+        )
+    else:
+        limit_mode = st.radio(
+            "Limit type", ["Single leg", "Joint (whole trade)"],
+            index=1 if t.get("joint_limit_flag") == "Yes" else 0, horizontal=True,
+            key=f"limitmode_{key_suffix}",
+            help="Single leg applies gain/loss % independently to each leg. "
+                 "Joint applies gain/loss % to the combined position.",
+        )
+
+    with st.form(key=f"form_{key_suffix}"):
         col1, col2 = st.columns(2)
         with col1:
             last_name = st.text_input("Submitter last name", t.get("submitter_last_name") or "")
@@ -85,90 +99,103 @@ def trade_form(trade, section: str, team: str):
             uni = st.text_input("Columbia UNI", t.get("submitter_uni") or "")
 
         trade_title = st.text_input("Trade title", t.get("trade_title") or "")
-        total_legs = st.radio("Trade legs", [1, 2], index=(t.get("total_legs") or 1) - 1, horizontal=True)
 
         st.markdown("**Leg 1**")
         c1, c2, c3 = st.columns([2, 1, 1])
         leg1_ticker = c1.text_input("Leg 1 Bloomberg ticker", t.get("leg1_ticker") or "",
                                      placeholder="e.g. SPY US Equity")
         leg1_direction = c2.selectbox("Direction", ["Long", "Short"],
-                                       index=0 if (t.get("leg1_direction") or "Long") == "Long" else 1)
+                                       index=0 if (t.get("leg1_direction") or "Long") == "Long" else 1,
+                                       key=f"leg1dir_{key_suffix}")
         leg1_exposure = c3.number_input("Leg 1 exposure %", min_value=0.0, max_value=100.0,
                                          value=float(t.get("leg1_exposure_pct") or (100.0 if total_legs == 1 else 50.0)),
-                                         step=1.0, disabled=(total_legs == 1))
+                                         step=1.0, disabled=(total_legs == 1), key=f"leg1exp_{key_suffix}")
 
         leg2_ticker, leg2_direction = None, None
         if total_legs == 2:
             st.markdown("**Leg 2**")
             c4, c5 = st.columns([2, 1])
             leg2_ticker = c4.text_input("Leg 2 Bloomberg ticker", t.get("leg2_ticker") or "",
-                                         placeholder="e.g. FEZ US Equity")
+                                         placeholder="e.g. FEZ US Equity", key=f"leg2tick_{key_suffix}")
             leg2_direction = c5.selectbox("Leg 2 direction", ["Long", "Short"],
                                            index=0 if (t.get("leg2_direction") or "Long") == "Long" else 1,
-                                           key="leg2dir")
+                                           key=f"leg2dir_{key_suffix}")
             st.caption(f"Leg 2 exposure will be recorded as {100 - leg1_exposure:.0f}% (the remainder).")
 
         st.markdown("**Trade memo narrative**")
-        priced_assessment = st.text_area("1. Assess what is priced", t.get("priced_assessment") or "", height=100)
-        thesis = st.text_area("2. State your thesis", t.get("thesis") or "", height=100)
-        implementation = st.text_area("3. Explain trade implementation", t.get("implementation") or "", height=100)
+        priced_assessment = st.text_area("1. Assess what is priced", t.get("priced_assessment") or "", height=100,
+                                          key=f"priced_{key_suffix}")
+        thesis = st.text_area("2. State your thesis", t.get("thesis") or "", height=100, key=f"thesis_{key_suffix}")
+        implementation = st.text_area("3. Explain trade implementation", t.get("implementation") or "", height=100,
+                                       key=f"impl_{key_suffix}")
         objectives_scenarios = st.text_area(
-            "4. Set objectives, assess scenarios, set limits", t.get("objectives_scenarios") or "", height=120)
+            "4. Set objectives, assess scenarios, set limits", t.get("objectives_scenarios") or "", height=120,
+            key=f"obj_{key_suffix}")
 
         st.markdown("**Risk management limits**")
         st.caption(
-            "Choose ONE way to set your gain/loss (stop-loss / take-profit) limits: "
-            "**Single leg** applies the percentages at the leg level (each leg exits "
-            "independently when it hits its own limit); **Joint** applies the "
-            "percentages to the trade as a whole (both legs exit together when the "
-            "combined position hits the limit)."
-        )
-        default_index = 1 if t.get("joint_limit_flag") == "Yes" else 0
-        limit_mode = st.radio(
-            "Limit type", ["Single leg", "Joint (whole trade)"],
-            index=default_index, horizontal=True,
+            f"Limit type: **{limit_mode}**. Enter each limit as a plain positive number "
+            f"(e.g. 8 for an 8% move) -- take-profit is automatically recorded as a gain, "
+            f"stop-loss is automatically recorded as a loss. Leave at 0 for no limit."
         )
 
-        single_leg_gain = single_leg_loss = 0.0
-        leg1_gain = leg1_loss = leg2_gain = leg2_loss = 0.0
-        joint_gain = joint_loss = 0.0
-        joint_limit_flag = "Yes" if limit_mode == "Joint (whole trade)" else "No"
+        # Every field below is a MAGNITUDE (always >= 0 by construction, via
+        # min_value=0.0). The correct sign is applied when building `fields`
+        # further down -- this makes it structurally impossible to record a
+        # take-profit as negative or a stop-loss as positive, regardless of
+        # what a user types. Each also has an explicit, unique key: which of
+        # these widgets even exist changes depending on total_legs/limit_mode,
+        # so we don't want Streamlit guessing widget identity by position.
+        single_leg_gain_mag = single_leg_loss_mag = 0.0
+        leg1_gain_mag = leg1_loss_mag = leg2_gain_mag = leg2_loss_mag = 0.0
+        joint_gain_mag = joint_loss_mag = 0.0
 
         if limit_mode == "Single leg":
             if total_legs == 1:
                 c1, c2 = st.columns(2)
-                single_leg_gain = c1.number_input(
-                    "Take-profit (gain) limit %", value=gain_default(t.get("single_leg_gain")),
-                    min_value=0.0, step=1.0, help="Enter as a positive number. Leave at 0 for no limit.")
-                single_leg_loss = c2.number_input(
-                    "Stop-loss limit %", value=loss_default(t.get("single_leg_loss")),
-                    max_value=0.0, step=1.0, help="Enter as a negative number. Leave at 0 for no limit.")
+                single_leg_gain_mag = c1.number_input(
+                    "Take-profit (gain) %", min_value=0.0, step=1.0,
+                    value=abs(float(t.get("single_leg_gain") or 0.0)),
+                    help="Positive number, e.g. 15 for a 15% take-profit. 0 = no limit.",
+                    key=f"slgain_{key_suffix}")
+                single_leg_loss_mag = c2.number_input(
+                    "Stop-loss %", min_value=0.0, step=1.0,
+                    value=abs(float(t.get("single_leg_loss") or 0.0)),
+                    help="Positive number, e.g. 8 for an 8% stop-loss (recorded as -8%). 0 = no limit.",
+                    key=f"slloss_{key_suffix}")
             else:
                 st.caption("Independent gain/loss limit for each leg:")
                 k1, k2, k3, k4 = st.columns(4)
-                leg1_gain = k1.number_input("Leg 1 take-profit %", value=gain_default(t.get("leg1_gain")),
-                                             min_value=0.0, step=1.0, help="Positive number; 0 = no limit.")
-                leg1_loss = k2.number_input("Leg 1 stop-loss %", value=loss_default(t.get("leg1_loss")),
-                                             max_value=0.0, step=1.0, help="Negative number; 0 = no limit.")
-                leg2_gain = k3.number_input("Leg 2 take-profit %", value=gain_default(t.get("leg2_gain")),
-                                             min_value=0.0, step=1.0, help="Positive number; 0 = no limit.")
-                leg2_loss = k4.number_input("Leg 2 stop-loss %", value=loss_default(t.get("leg2_loss")),
-                                             max_value=0.0, step=1.0, help="Negative number; 0 = no limit.")
+                leg1_gain_mag = k1.number_input("Leg 1 take-profit %", min_value=0.0, step=1.0,
+                                                 value=abs(float(t.get("leg1_gain") or 0.0)),
+                                                 key=f"l1gain_{key_suffix}")
+                leg1_loss_mag = k2.number_input("Leg 1 stop-loss %", min_value=0.0, step=1.0,
+                                                 value=abs(float(t.get("leg1_loss") or 0.0)),
+                                                 key=f"l1loss_{key_suffix}")
+                leg2_gain_mag = k3.number_input("Leg 2 take-profit %", min_value=0.0, step=1.0,
+                                                 value=abs(float(t.get("leg2_gain") or 0.0)),
+                                                 key=f"l2gain_{key_suffix}")
+                leg2_loss_mag = k4.number_input("Leg 2 stop-loss %", min_value=0.0, step=1.0,
+                                                 value=abs(float(t.get("leg2_loss") or 0.0)),
+                                                 key=f"l2loss_{key_suffix}")
         else:
             st.caption("Gain/loss limit for the combined trade (both legs exit together):")
             j1, j2 = st.columns(2)
-            joint_gain = j1.number_input(
-                "Joint take-profit (gain) limit %", value=gain_default(t.get("joint_gain")),
-                min_value=0.0, step=1.0, help="Enter as a positive number. Leave at 0 for no limit.")
-            joint_loss = j2.number_input(
-                "Joint stop-loss limit %", value=loss_default(t.get("joint_loss")),
-                max_value=0.0, step=1.0, help="Enter as a negative number. Leave at 0 for no limit.")
-
+            joint_gain_mag = j1.number_input(
+                "Joint take-profit (gain) %", min_value=0.0, step=1.0,
+                value=abs(float(t.get("joint_gain") or 0.0)),
+                help="Positive number. 0 = no limit.", key=f"jgain_{key_suffix}")
+            joint_loss_mag = j2.number_input(
+                "Joint stop-loss %", min_value=0.0, step=1.0,
+                value=abs(float(t.get("joint_loss") or 0.0)),
+                help="Positive number, recorded as a negative loss. 0 = no limit.", key=f"jloss_{key_suffix}")
 
         save_col, submit_col = st.columns(2)
         save_clicked = save_col.form_submit_button("\U0001F4BE Save draft", use_container_width=True)
         submit_clicked = submit_col.form_submit_button("\u2705 Submit final (locks the trade)",
                                                          use_container_width=True, type="primary")
+
+    joint_limit_flag = "Yes" if limit_mode == "Joint (whole trade)" else "No"
 
     fields = dict(
         submitter_last_name=none_if_blank(last_name),
@@ -186,15 +213,15 @@ def trade_form(trade, section: str, team: str):
         thesis=none_if_blank(thesis),
         implementation=none_if_blank(implementation),
         objectives_scenarios=none_if_blank(objectives_scenarios),
-        single_leg_gain=single_leg_gain or None,
-        single_leg_loss=single_leg_loss or None,
+        single_leg_gain=single_leg_gain_mag or None,
+        single_leg_loss=-single_leg_loss_mag if single_leg_loss_mag else None,
         joint_limit_flag=joint_limit_flag,
-        joint_gain=joint_gain or None,
-        joint_loss=joint_loss or None,
-        leg1_gain=leg1_gain or None,
-        leg1_loss=leg1_loss or None,
-        leg2_gain=leg2_gain or None,
-        leg2_loss=leg2_loss or None,
+        joint_gain=joint_gain_mag or None,
+        joint_loss=-joint_loss_mag if joint_loss_mag else None,
+        leg1_gain=leg1_gain_mag or None,
+        leg1_loss=-leg1_loss_mag if leg1_loss_mag else None,
+        leg2_gain=leg2_gain_mag or None,
+        leg2_loss=-leg2_loss_mag if leg2_loss_mag else None,
     )
 
     if save_clicked:
@@ -213,28 +240,12 @@ def trade_form(trade, section: str, team: str):
                 ("thesis", thesis), ("implementation", implementation),
             ] if not (val or "").strip()
         ]
-        # Belt-and-suspenders check on top of the widget min/max: gains must
-        # be >= 0, losses must be <= 0, regardless of how the value got here.
-        sign_errors = [
-            label for label, val in [
-                ("take-profit/gain", single_leg_gain), ("take-profit/gain", leg1_gain),
-                ("take-profit/gain", leg2_gain), ("take-profit/gain", joint_gain),
-            ] if val < 0
-        ] + [
-            label for label, val in [
-                ("stop-loss", single_leg_loss), ("stop-loss", leg1_loss),
-                ("stop-loss", leg2_loss), ("stop-loss", joint_loss),
-            ] if val > 0
-        ]
 
         st.markdown("**Ticker validation**")
         tickers_ok = render_ticker_feedback(checks)
 
         if required_missing:
             st.error(f"Missing required field(s): {', '.join(required_missing)}. Save as a draft and finish these first.")
-        elif sign_errors:
-            st.error("Take-profit/gain limits must be positive and stop-loss limits must be negative. "
-                      "Fix the highlighted field(s) above.")
         elif not tickers_ok:
             st.error("Fix the ticker issue(s) above, then submit again. (You can still save as a draft.)")
         else:
