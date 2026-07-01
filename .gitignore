@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local database and generated secrets -- never commit these
+data/trade_memos.db
+data/team_access_codes.csv
+.streamlit/secrets.toml
