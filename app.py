@@ -435,6 +435,68 @@ def instructor_portal():
             "distribute rows individually rather than posting the whole file."
         )
 
+    st.divider()
+    st.subheader("Reset teams / trades")
+    st.caption(
+        "Use this after updating data/team_roster.csv with real team names "
+        "(e.g. replacing placeholder/test teams), or to start a new semester "
+        "with a clean slate."
+    )
+
+    try:
+        roster_pairs = set(team_codes.read_roster())
+    except FileNotFoundError:
+        roster_pairs = set()
+        st.error("data/team_roster.csv not found -- can't compare against the roster.")
+
+    db_team_pairs = {(r["section"], r["team"]) for r in db.list_teams()}
+    stale_pairs = sorted(db_team_pairs - roster_pairs)
+
+    with st.expander("\U0001F9F9 Remove stale teams (safe -- only removes teams NOT in the current roster)"):
+        if not stale_pairs:
+            st.write("None found -- every team in the database matches your current `data/team_roster.csv`.")
+        else:
+            st.write(f"{len(stale_pairs)} team(s) in the database are **not** in your current roster:")
+            st.dataframe(
+                [{"section": s, "team": t} for s, t in stale_pairs],
+                width="stretch", hide_index=True,
+            )
+            st.caption(
+                "This deletes these team(s) AND any trades already recorded "
+                "under them (e.g. leftover test submissions). Teams that "
+                "match your current roster are never touched by this."
+            )
+            confirm_stale = st.checkbox(
+                "I understand this permanently deletes these teams and their trades.",
+                key="confirm_remove_stale",
+            )
+            if st.button("Remove stale teams + their trades", disabled=not confirm_stale):
+                trades_deleted = db.delete_trades_for_teams(stale_pairs)
+                teams_deleted = db.delete_teams(stale_pairs)
+                st.success(f"Removed {teams_deleted} stale team(s) and {trades_deleted} associated trade(s).")
+                st.rerun()
+
+    with st.expander("\U0001F4A3 Full reset -- wipe EVERYTHING and reseed from roster (nuclear)"):
+        st.caption(
+            "Deletes every team and every trade currently in the database "
+            "(including any real, already-submitted trades -- not just "
+            "stale/test ones), then recreates teams fresh from "
+            "`data/team_roster.csv` with brand-new access codes. Use this "
+            "only for a genuinely clean start, e.g. before a new semester."
+        )
+        confirm_text = st.text_input(
+            "Type RESET (all caps) to confirm a full wipe", key="full_reset_confirm")
+        if st.button("Full reset: wipe everything and reseed from roster",
+                      disabled=(confirm_text.strip() != "RESET")):
+            db.delete_all_trades()
+            db.delete_all_teams()
+            new_rows = team_codes.seed_from_roster()
+            st.success(
+                f"Wiped all data and reseeded {len(new_rows)} teams from the current roster. "
+                f"Open 'Team access codes' above to view/download the new codes."
+            )
+            st.rerun()
+
 
 # --------------------------------------------------------------------------
 

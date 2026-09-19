@@ -50,6 +50,11 @@ trade_memo_app/
 2. **Edit `data/team_roster.csv`** so it has one row per `section,team` for
    the current semester (a starter file with two sections' worth of NATO-
    alphabet team names is already there -- delete/add rows as needed).
+   **Note:** seeding is additive -- clicking "Generate" adds/updates
+   whatever's in this file but never removes teams left over from an
+   older version of it. If you replace placeholder/test team names with
+   real ones, use **Instructor view -> Reset teams / trades** afterward
+   to clear out the stale ones (see "Resetting/cleaning up" below).
 
 3. **Edit `data/permitted_tickers.csv`** to reflect the instruments you want
    to allow this semester. It uses simple wildcard patterns, e.g.:
@@ -192,6 +197,36 @@ SQLite file at `data/trade_memos.db` (gitignored).
   workflow.
 - Trades flagged `needs_review` (bonds/CDS not on the standing whitelist)
   aren't blocked from submission, but you'll want to eyeball them each week.
+
+## Resetting / cleaning up
+
+Under **Instructor view -> Reset teams / trades**, two options handle
+different situations:
+
+- **Remove stale teams (safe)** -- compares the teams currently in the
+  database against your current `data/team_roster.csv` and deletes only
+  the ones that are no longer in it (plus any trades recorded under
+  them). Teams that match your current roster are never touched -- their
+  codes, drafts, and submitted trades are all left exactly as they are.
+  Use this after swapping placeholder/test team names for real ones, or
+  any time you trim the roster.
+- **Full reset (nuclear)** -- deletes every team and every trade in the
+  database, no exceptions, then recreates teams fresh from the current
+  roster with brand-new codes. This also removes real, already-submitted
+  trades, not just stale ones, so it requires typing `RESET` to confirm.
+  Use this only for a genuinely clean start (e.g. before a new semester),
+  not as a routine cleanup step.
+
+Both require an explicit confirmation (a checkbox or typing `RESET`) before
+the button becomes clickable, specifically so a stray click can't wipe
+data by accident.
+
+**When updating the app's code from a new version of these files:** only
+copy over the `.py` files (and `schema_*.sql`, `requirements.txt`, etc.)
+-- never overwrite your own `data/team_roster.csv` or
+`data/permitted_tickers.csv` with a freshly-downloaded copy of this
+project, since those are meant to hold *your* current semester's data,
+not the generic placeholder versions this project ships with.
 
 ## Extending later
 

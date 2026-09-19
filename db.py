@@ -218,3 +218,44 @@ def set_end_date(trade_id: int, end_date: str) -> None:
 def all_trades() -> list:
     with get_conn() as conn:
         return _run(conn, "SELECT * FROM trades ORDER BY section, team, trade_no").fetchall()
+
+
+# --------------------------------------------------------------------------
+# Reset / cleanup (used by the Instructor view's "danger zone")
+# --------------------------------------------------------------------------
+
+def delete_trades_for_teams(pairs: list[tuple[str, str]]) -> int:
+    """Delete every trade belonging to any of the given (section, team)
+    pairs. Returns the number of trade rows deleted."""
+    if not pairs:
+        return 0
+    deleted = 0
+    with get_conn() as conn:
+        for section, team in pairs:
+            cur = _run(conn, "DELETE FROM trades WHERE section = ? AND team = ?", (section, team))
+            deleted += cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+    return deleted
+
+
+def delete_teams(pairs: list[tuple[str, str]]) -> int:
+    """Delete the given (section, team) rows from the teams table. Does NOT
+    touch trades -- call delete_trades_for_teams first if that's wanted too.
+    Returns the number of team rows deleted."""
+    if not pairs:
+        return 0
+    deleted = 0
+    with get_conn() as conn:
+        for section, team in pairs:
+            cur = _run(conn, "DELETE FROM teams WHERE section = ? AND team = ?", (section, team))
+            deleted += cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+    return deleted
+
+
+def delete_all_trades() -> None:
+    with get_conn() as conn:
+        _run(conn, "DELETE FROM trades")
+
+
+def delete_all_teams() -> None:
+    with get_conn() as conn:
+        _run(conn, "DELETE FROM teams")

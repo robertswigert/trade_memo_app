@@ -26,21 +26,30 @@ def gen_code(length: int = 8) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
+def read_roster(roster_path: Path = DEFAULT_ROSTER) -> list[tuple[str, str]]:
+    """Reads (section, team) pairs from a roster CSV."""
+    pairs = []
+    with open(roster_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            pairs.append((row["section"].strip(), row["team"].strip()))
+    return pairs
+
+
 def seed_from_roster(roster_path: Path = DEFAULT_ROSTER) -> list[dict]:
     """Reads section/team pairs from roster_path, generates a fresh random
     code for each, writes them to the teams table, and returns the list of
     {section, team, access_code} dicts so the caller can display/download
-    them. Re-running this OVERWRITES every existing code."""
+    them. Re-running this OVERWRITES every existing code for teams still in
+    the roster, and ADDS any new ones -- it does NOT remove teams that used
+    to be in an older roster but aren't anymore; see db.delete_teams /
+    db.delete_all_teams for that."""
     db.init_db()
     rows_out = []
-    with open(roster_path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            section = row["section"].strip()
-            team = row["team"].strip()
-            code = gen_code()
-            db.upsert_team(section, team, code)
-            rows_out.append({"section": section, "team": team, "access_code": code})
+    for section, team in read_roster(roster_path):
+        code = gen_code()
+        db.upsert_team(section, team, code)
+        rows_out.append({"section": section, "team": team, "access_code": code})
     return rows_out
 
 
