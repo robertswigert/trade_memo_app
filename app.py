@@ -122,16 +122,6 @@ def trade_form(trade, section: str, team: str):
                                            key=f"leg2dir_{key_suffix}")
             st.caption(f"Leg 2 exposure will be recorded as {100 - leg1_exposure:.0f}% (the remainder).")
 
-        st.markdown("**Trade memo narrative**")
-        priced_assessment = st.text_area("1. Assess what is priced", t.get("priced_assessment") or "", height=100,
-                                          key=f"priced_{key_suffix}")
-        thesis = st.text_area("2. State your thesis", t.get("thesis") or "", height=100, key=f"thesis_{key_suffix}")
-        implementation = st.text_area("3. Explain trade implementation", t.get("implementation") or "", height=100,
-                                       key=f"impl_{key_suffix}")
-        objectives_scenarios = st.text_area(
-            "4. Set objectives, assess scenarios, set limits", t.get("objectives_scenarios") or "", height=120,
-            key=f"obj_{key_suffix}")
-
         st.markdown("**Risk management limits**")
         st.caption(
             f"Limit type: **{limit_mode}**. Enter each limit as a plain positive number "
@@ -209,10 +199,11 @@ def trade_form(trade, section: str, team: str):
         leg1_exposure_pct=leg1_exposure,
         leg2_ticker=none_if_blank(leg2_ticker) if total_legs == 2 else None,
         leg2_direction=leg2_direction if total_legs == 2 else None,
-        priced_assessment=none_if_blank(priced_assessment),
-        thesis=none_if_blank(thesis),
-        implementation=none_if_blank(implementation),
-        objectives_scenarios=none_if_blank(objectives_scenarios),
+        # Note: priced_assessment/thesis/implementation/objectives_scenarios
+        # are intentionally not collected here anymore (narrative now lives
+        # in a separate document the team submits) and are left out of this
+        # dict entirely -- save_draft only updates the keys it's given, so
+        # any old values already stored from before this change are left as-is.
         single_leg_gain=single_leg_gain_mag or None,
         single_leg_loss=-single_leg_loss_mag if single_leg_loss_mag else None,
         joint_limit_flag=joint_limit_flag,
@@ -237,7 +228,6 @@ def trade_form(trade, section: str, team: str):
                 ("submitter last name", last_name), ("submitter first name", first_name),
                 ("email", email), ("UNI", uni), ("trade title", trade_title),
                 ("leg 1 ticker", leg1_ticker),
-                ("thesis", thesis), ("implementation", implementation),
             ] if not (val or "").strip()
         ]
 
@@ -276,11 +266,20 @@ def submitted_trade_view(trade):
             f"Leg 2 gain {t['leg2_gain']}% / loss {t['leg2_loss']}%"
         )
 
-    with st.expander("View full trade memo"):
-        st.markdown(f"**1. Assess what is priced**\n\n{t['priced_assessment']}")
-        st.markdown(f"**2. Thesis**\n\n{t['thesis']}")
-        st.markdown(f"**3. Implementation**\n\n{t['implementation']}")
-        st.markdown(f"**4. Objectives / scenarios / limits**\n\n{t['objectives_scenarios']}")
+    # Narrative fields are no longer collected (the team's trade memo now
+    # lives in a separate document) -- but if an older trade already has
+    # this data stored from before that change, still show it rather than
+    # silently hiding it.
+    if any(t.get(k) for k in ("priced_assessment", "thesis", "implementation", "objectives_scenarios")):
+        with st.expander("View saved trade memo narrative (legacy)"):
+            if t.get("priced_assessment"):
+                st.markdown(f"**1. Assess what is priced**\n\n{t['priced_assessment']}")
+            if t.get("thesis"):
+                st.markdown(f"**2. Thesis**\n\n{t['thesis']}")
+            if t.get("implementation"):
+                st.markdown(f"**3. Implementation**\n\n{t['implementation']}")
+            if t.get("objectives_scenarios"):
+                st.markdown(f"**4. Objectives / scenarios / limits**\n\n{t['objectives_scenarios']}")
 
     current_end = t.get("end_date")
     new_end = st.date_input(
@@ -339,12 +338,23 @@ def team_portal():
             trade_form(trade, section, team)
 
     st.divider()
-    nxt = db.next_trade_no(section, team)
-    if nxt is None:
+    existing_nos = {t["trade_no"] for t in trades}
+    remaining = [n for n in range(1, db.MAX_TRADES_PER_TEAM + 1) if n not in existing_nos]
+    if not remaining:
         st.info(f"Your team has already used all {db.MAX_TRADES_PER_TEAM} trade slots for the semester.")
     else:
-        st.subheader(f"Start Trade #{nxt}")
-        trade_form({"trade_no": nxt}, section, team)
+        st.subheader("Start a new trade")
+        if len(remaining) > 1:
+            st.caption(
+                "Trades don't need to be started in order -- pick whichever "
+                "slot you're ready to work on. (A trade does NOT need to be "
+                "submitted, or even saved as a draft, before you can start "
+                "another one.)"
+            )
+            chosen = st.selectbox("Trade number", remaining, key="new_trade_no_select")
+        else:
+            chosen = remaining[0]
+        trade_form({"trade_no": chosen}, section, team)
 
 
 def instructor_portal():
