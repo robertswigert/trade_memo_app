@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 from datetime import date
+from pathlib import Path
 
 import streamlit as st
 
@@ -20,7 +21,20 @@ import export_blotter
 import team_codes
 from validation import check_trade_tickers
 
-st.set_page_config(page_title="GMI Trade Memo", page_icon="\U0001F4C8", layout="centered")
+BASE_DIR = Path(__file__).resolve().parent
+CBS_LOGO_PATH = BASE_DIR / "assets" / "cbs_hermes_icon.png"
+
+st.set_page_config(
+    page_title="GMI Trade Memo",
+    page_icon=str(CBS_LOGO_PATH) if CBS_LOGO_PATH.exists() else "\U0001F4C8",
+    layout="centered",
+)
+if CBS_LOGO_PATH.exists():
+    # Places the CBS icon at the top of the sidebar (Streamlit's standard
+    # spot for an app logo); falls back silently if the asset is missing
+    # so a fresh checkout without the logo file still runs fine.
+    st.logo(str(CBS_LOGO_PATH))
+
 db.init_db()
 
 INSTRUCTOR_CODE = os.environ.get("GMI_INSTRUCTOR_CODE", st.secrets.get("INSTRUCTOR_CODE", "changeme"))
@@ -29,6 +43,21 @@ INSTRUCTOR_CODE = os.environ.get("GMI_INSTRUCTOR_CODE", st.secrets.get("INSTRUCT
 # --------------------------------------------------------------------------
 # Small helpers
 # --------------------------------------------------------------------------
+
+def page_header(title: str) -> None:
+    """Page title with the CBS Hermes icon right-aligned beside it -- per
+    CBS's own brand guidelines for standalone use of the icon (right-aligned
+    along the top, never centered horizontally). Falls back to a plain
+    title if the logo asset isn't present."""
+    if CBS_LOGO_PATH.exists():
+        col_title, col_logo = st.columns([5, 1])
+        with col_title:
+            st.title(title)
+        with col_logo:
+            st.image(str(CBS_LOGO_PATH), width=64)
+    else:
+        st.title(title)
+
 
 def status_badge(status: str) -> str:
     return "\U0001F7E2 Submitted" if status == "submitted" else "\U0001F7E1 Draft"
@@ -305,7 +334,7 @@ def submitted_trade_view(trade):
 # --------------------------------------------------------------------------
 
 def team_portal():
-    st.title("\U0001F4C8 GMI Trade Memo Submission")
+    page_header("\U0001F4C8 GMI Trade Memo Submission")
     st.caption("One designated submitter per team. Trades stay editable as drafts; "
                "once you hit Submit final the memo is locked (only the end date can change later).")
 
@@ -358,7 +387,7 @@ def team_portal():
 
 
 def instructor_portal():
-    st.title("\U0001F393 Instructor View")
+    page_header("\U0001F393 Instructor View")
     code = st.text_input("Instructor access code", type="password")
     if code != INSTRUCTOR_CODE:
         if code:

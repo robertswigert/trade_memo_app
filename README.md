@@ -29,6 +29,8 @@ trade_memo_app/
 ├── schema_sqlite.sql       # Database schema -- SQLite dialect
 ├── schema_postgres.sql     # Database schema -- Postgres dialect
 ├── requirements.txt
+├── assets/
+│   └── cbs_hermes_icon.png  # CBS's official standalone icon, used as-is
 ├── data/
 │   ├── permitted_tickers.csv   # Instructor-maintained instrument whitelist
 │   ├── team_roster.csv         # section, team -- edit this each semester
@@ -247,14 +249,29 @@ it won't break when Streamlit updates its internal HTML structure. To
 adjust it, edit the hex values in `.streamlit/config.toml` directly; no
 other code changes needed, and it applies the moment the app reloads.
 
-**The CBS shield / "Hermes" logo is not included.** CBS's own brand
-guidelines explicitly prohibit recreating the logo from scratch ("Don'ts:
-... Recreate the logo. Use only the approved digital files provided"), so
-this wasn't fabricated. To add it: get the approved logo file (PNG or SVG)
--- from CBS's brand portal, or by emailing communications@gsb.columbia.edu
--- and it can be placed in the app header via `st.image()`, following the
-guideline's positioning rules (right-aligned, with the specified clearance
-space around it).
+**The CBS Hermes icon is included** at `assets/cbs_hermes_icon.png` -- the
+approved standalone icon file, used as provided (not recreated or
+modified). It appears in two places:
+
+- Top of the sidebar, via `st.logo()` -- Streamlit's standard spot for an
+  app logo.
+- Right-aligned next to the title on both the Team submission and
+  Instructor view pages, via the `page_header()` helper in `app.py`.
+
+Positioning follows CBS's guideline for standalone use of the icon
+(section 2.13: right-aligned, never centered horizontally) -- with one
+adaptation: their spec calls for sizing the icon between one-third and
+one-half of the canvas height, which is meant for print/document covers.
+At that size in a compact web form it would dominate the page, so it's
+instead sized proportionally for a web app header (64px). If you'd
+prefer a different size or placement, adjust the `width=64` value and
+column ratio (`[5, 1]`) in `page_header()`.
+
+To swap in a different logo file later (e.g. the full wordmark instead of
+just the icon), replace `assets/cbs_hermes_icon.png` with the new file
+(same filename, or update `CBS_LOGO_PATH` in `app.py`) and commit it --
+no other changes needed. If the file is ever removed, the app falls back
+to a plain text title rather than erroring.
 
 ## Extending later
 
