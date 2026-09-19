@@ -191,9 +191,9 @@ def trade_form(trade, section: str, team: str):
                 help="Positive number, recorded as a negative loss. 0 = no limit.", key=f"jloss_{key_suffix}")
 
         save_col, submit_col = st.columns(2)
-        save_clicked = save_col.form_submit_button("\U0001F4BE Save draft", use_container_width=True)
+        save_clicked = save_col.form_submit_button("\U0001F4BE Save draft", width="stretch")
         submit_clicked = submit_col.form_submit_button("\u2705 Submit final (locks the trade)",
-                                                         use_container_width=True, type="primary")
+                                                         width="stretch", type="primary")
 
     joint_limit_flag = "Yes" if limit_mode == "Joint (whole trade)" else "No"
 
@@ -383,35 +383,47 @@ def instructor_portal():
 
     st.divider()
     st.subheader("Team access codes")
-    st.caption(
-        "Reads section/team pairs from data/team_roster.csv (edit that file in your "
-        "GitHub repo to add/remove teams each semester), generates a fresh random "
-        "code for every team, and lets you download the list to distribute privately "
-        "to each team's designated submitter. **Regenerating invalidates all previous "
-        "codes** -- useful if a code leaks, but don't click it mid-semester unless you "
-        "mean to reset everyone."
-    )
-    if st.button("\U0001F510 Generate / regenerate all team access codes"):
-        rows = team_codes.seed_from_roster()
-        st.session_state["_new_codes"] = rows
-        st.success(f"Generated codes for {len(rows)} teams.")
 
-    if "_new_codes" in st.session_state:
+    # --- Regeneration (destructive) happens first, so if it runs this same
+    # turn, the "current codes" view below already reflects the new codes.
+    with st.expander("\u26a0\ufe0f Generate / regenerate ALL team access codes (danger zone)"):
+        st.caption(
+            "Reads section/team pairs from data/team_roster.csv, generates a "
+            "**brand-new** random code for every team, and immediately "
+            "**invalidates every existing code**. Only do this for a new "
+            "semester or if a code leaked -- not something to click "
+            "mid-semester by accident."
+        )
+        if st.button("\U0001F510 Generate / regenerate all team access codes"):
+            team_codes.seed_from_roster()
+            st.success("Generated fresh codes for every team. See the current list below.")
+
+    # --- Current codes (non-destructive): reads what's actually stored in
+    # the database right now, so this works whether codes were generated
+    # a minute ago or a month ago -- no need to regenerate just to see them.
+    current_rows = [
+        {"section": r["section"], "team": r["team"], "access_code": r["access_code"]}
+        for r in db.list_teams()
+    ]
+
+    if not current_rows:
+        st.info("No teams exist yet -- use 'Generate' above to create them.")
+    else:
+        show_codes = st.checkbox("Show current codes on screen", value=False)
+        if show_codes:
+            st.dataframe(current_rows, width="stretch", hide_index=True)
         st.download_button(
-            "\U0001F4E5 Download team access codes (.csv)",
-            data=team_codes.codes_to_csv_bytes(st.session_state["_new_codes"]),
+            "\U0001F4E5 Download current team access codes (.csv)",
+            data=team_codes.codes_to_csv_bytes(current_rows),
             file_name="team_access_codes.csv",
             mime="text/csv",
         )
-        st.warning("This file contains every team's login code. Download it, then "
-                   "distribute rows individually -- don't post the whole file "
-                   "somewhere all students can see it.")
-
-    st.subheader("Registered teams")
-    st.dataframe(
-        [{"section": r["section"], "team": r["team"]} for r in db.list_teams()],
-        use_container_width=True,
-    )
+        st.caption(
+            "This list is always the current, live codes -- safe to check back "
+            "here any time. Contains every team's login code, so don't leave "
+            "'Show current codes' on screen where others can see it, and "
+            "distribute rows individually rather than posting the whole file."
+        )
 
 
 # --------------------------------------------------------------------------
