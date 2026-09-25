@@ -423,15 +423,50 @@ def instructor_portal():
     st.divider()
     st.subheader("Team access codes")
 
+    # --- Add missing teams (safe, non-destructive): the action for the
+    # common case of adding a couple of teams mid-semester. Existing teams
+    # and their already-distributed codes are never touched.
+    try:
+        roster_pairs_for_add = set(team_codes.read_roster())
+    except FileNotFoundError:
+        roster_pairs_for_add = set()
+
+    existing_pairs_for_add = {(r["section"], r["team"]) for r in db.list_teams()}
+    missing_pairs = sorted(roster_pairs_for_add - existing_pairs_for_add)
+
+    with st.expander(
+        f"\u2795 Add teams from roster not yet in the database (safe)"
+        + (f" -- {len(missing_pairs)} found" if missing_pairs else ""),
+        expanded=bool(missing_pairs),
+    ):
+        if not missing_pairs:
+            st.write("None found -- every team in `data/team_roster.csv` is already in the database.")
+        else:
+            st.write(f"{len(missing_pairs)} team(s) in your roster are not yet in the database:")
+            st.dataframe(
+                [{"section": s, "team": t} for s, t in missing_pairs],
+                width="stretch", hide_index=True,
+            )
+            st.caption(
+                "Adds these team(s) with a freshly generated access code each. "
+                "Every team that already exists -- and its code -- is left "
+                "completely untouched."
+            )
+            if st.button("Add missing team(s) with new access codes"):
+                added = team_codes.add_missing_from_roster()
+                st.success(f"Added {len(added)} team(s). See the current codes list below to get theirs.")
+                st.rerun()
+
     # --- Regeneration (destructive) happens first, so if it runs this same
     # turn, the "current codes" view below already reflects the new codes.
     with st.expander("\u26a0\ufe0f Generate / regenerate ALL team access codes (danger zone)"):
         st.caption(
             "Reads section/team pairs from data/team_roster.csv, generates a "
-            "**brand-new** random code for every team, and immediately "
-            "**invalidates every existing code**. Only do this for a new "
-            "semester or if a code leaked -- not something to click "
-            "mid-semester by accident."
+            "**brand-new** random code for every team -- including ones "
+            "already in the database -- and immediately **invalidates every "
+            "existing code**. Only do this for a new semester or if a code "
+            "leaked. To add a few new teams without disturbing everyone "
+            "else's codes, use 'Add teams from roster' above instead."
         )
         if st.button("\U0001F510 Generate / regenerate all team access codes"):
             team_codes.seed_from_roster()

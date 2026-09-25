@@ -36,6 +36,26 @@ def read_roster(roster_path: Path = DEFAULT_ROSTER) -> list[tuple[str, str]]:
     return pairs
 
 
+def add_missing_from_roster(roster_path: Path = DEFAULT_ROSTER) -> list[dict]:
+    """Adds only the teams in roster_path that are NOT already in the
+    database, each with a freshly generated code. Every team that already
+    exists -- and its access code -- is left completely untouched. This is
+    the safe way to add teams mid-semester (e.g. a couple of late
+    additions to the roster) without invalidating codes already
+    distributed to everyone else. Returns the list of newly-added
+    {section, team, access_code} dicts (empty if nothing was missing)."""
+    db.init_db()
+    existing = {(r["section"], r["team"]) for r in db.list_teams()}
+    added = []
+    for section, team in read_roster(roster_path):
+        if (section, team) in existing:
+            continue
+        code = gen_code()
+        db.upsert_team(section, team, code)
+        added.append({"section": section, "team": team, "access_code": code})
+    return added
+
+
 def seed_from_roster(roster_path: Path = DEFAULT_ROSTER) -> list[dict]:
     """Reads section/team pairs from roster_path, generates a fresh random
     code for each, writes them to the teams table, and returns the list of

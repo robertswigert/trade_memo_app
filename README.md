@@ -201,10 +201,25 @@ SQLite file at `data/trade_memos.db` (gitignored).
 - Trades flagged `needs_review` (bonds/CDS not on the standing whitelist)
   aren't blocked from submission, but you'll want to eyeball them each week.
 
+## Adding teams mid-semester
+
+If you add a team or two to `data/team_roster.csv` after the semester's
+already started (a late add, a section correction), use **Instructor view
+-> Reset teams / trades -> Add teams from roster not yet in the database**.
+This is the routine, safe action for that case: it adds only the team(s)
+missing from the database, each with a freshly generated code, and never
+touches any team that already exists -- so everyone else's already-
+distributed codes keep working exactly as before. It's also safe to click
+repeatedly; if nothing's missing, it does nothing.
+
+**Don't** use "Generate / regenerate ALL team access codes" for this --
+that one creates a brand-new code for every team, including ones that
+already exist, invalidating every code you've already handed out.
+
 ## Resetting / cleaning up
 
-Under **Instructor view -> Reset teams / trades**, two options handle
-different situations:
+The same **Instructor view -> Reset teams / trades** section also has two
+options for less routine situations:
 
 - **Remove stale teams (safe)** -- compares the teams currently in the
   database against your current `data/team_roster.csv` and deletes only
@@ -220,8 +235,9 @@ different situations:
   Use this only for a genuinely clean start (e.g. before a new semester),
   not as a routine cleanup step.
 
-Both require an explicit confirmation (a checkbox or typing `RESET`) before
-the button becomes clickable, specifically so a stray click can't wipe
+All three require an explicit confirmation (a checkbox or typing `RESET`,
+except "Add teams" which is non-destructive enough to run directly) before
+anything destructive happens, specifically so a stray click can't wipe
 data by accident.
 
 **When updating the app's code from a new version of these files:** only
