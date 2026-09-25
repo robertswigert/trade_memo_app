@@ -1,0 +1,76 @@
+# Permitted instrument patterns for the GMI Trade Memo app.
+# One pattern per line. '*' is a wildcard. Matching is case-insensitive.
+# Comment lines start with '#'.
+#
+# This file is meant to be maintained by the instructor each semester.
+# - Exact tickers (e.g. "SPY US Equity") only match that one instrument.
+# - Root wildcards (e.g. "GC* Comdty") match any contract-month/year suffix,
+#   which futures need since the front contract rolls every semester.
+# - "* Curncy" / "* Index" are left open since FX crosses and benchmark
+#   indices are numerous, low-risk to mis-key, and don't need per-ticker
+#   whitelisting the way single stocks do.
+# - Corp/Govt/Muni/CDS instruments are intentionally NOT whitelisted here;
+#   validation.py routes those to manual instructor review instead.
+
+# --- Broad index / rates benchmarks ---
+* Index
+* Curncy
+
+# --- Major equity index futures & commodity futures (root + any roll) ---
+ES* Index
+NQ* Index
+RTY* Index
+GC* Comdty
+GC* COMB Comdty
+SI* Comdty
+CL* Comdty
+CO* Comdty
+NG* Comdty
+HG* Comdty
+ZS* Comdty
+ZN* Comdty
+ZQ* Comdty
+TU* Comdty
+FV* Comdty
+TY* Comdty
+US* Comdty
+RX* Comdty
+
+# --- Common single-name equities used in past trades ---
+JPM US Equity
+MELI US Equity
+MOD US Equity
+CCJ US Equity
+
+# --- Common sector / country / thematic ETFs ---
+SPY US Equity
+QQQ US Equity
+IWM US Equity
+VOO US Equity
+DIA US Equity
+EEM US Equity
+EFA US Equity
+EWJ US Equity
+EWW US Equity
+EWZ US Equity
+FXI US Equity
+INDA US Equity
+MCHI US Equity
+KWEB US Equity
+EMLC US Equity
+EMXC US Equity
+HYG US Equity
+TLT US Equity
+GLD US Equity
+SMH US Equity
+XLE US Equity
+XLU US Equity
+XLRE US Equity
+ITB US Equity
+KBWB US Equity
+KRE US Equity
+REMX US Equity
+COPX US Equity
+USMV US Equity
+UDN US Equity
+VNQ US Equity
