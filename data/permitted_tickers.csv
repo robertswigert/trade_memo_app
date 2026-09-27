@@ -35,6 +35,8 @@ FV* Comdty
 TY* Comdty
 US* Comdty
 RX* Comdty
+SFR* Comdty
+UXY* Comdty
 
 # --- Common single-name equities used in past trades ---
 JPM US Equity
@@ -74,3 +76,5 @@ COPX US Equity
 USMV US Equity
 UDN US Equity
 VNQ US Equity
+1615 JP Equity
+1306 JP Equity
