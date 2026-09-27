@@ -25,6 +25,7 @@ GC* COMB Comdty
 SI* Comdty
 CL* Comdty
 CO* Comdty
+COR* Comdty
 NG* Comdty
 HG* Comdty
 ZS* Comdty
@@ -37,12 +38,16 @@ US* Comdty
 RX* Comdty
 SFR* Comdty
 UXY* Comdty
+SER* Comdty
+FF* Comdty
 
 # --- Common single-name equities used in past trades ---
 JPM US Equity
 MELI US Equity
 MOD US Equity
 CCJ US Equity
+SPY US 12/31/26 C770 Equity
+SPY US 12/31/26 P693 Equity
 
 # --- Common sector / country / thematic ETFs ---
 SPY US Equity
@@ -80,3 +85,5 @@ VNQ US Equity
 1306 JP Equity
 SCHP US Equity
 IEF US Equity
+SHY US Equity
+TUA US Equity
