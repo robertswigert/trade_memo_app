@@ -20,6 +20,7 @@ identically either way.
 """
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -226,12 +227,19 @@ def all_trades() -> list:
 
 def delete_trades_for_teams(pairs: list[tuple[str, str]]) -> int:
     """Delete every trade belonging to any of the given (section, team)
-    pairs. Returns the number of trade rows deleted."""
+    pairs, and any correction history for those trades. Returns the
+    number of trade rows deleted."""
     if not pairs:
         return 0
     deleted = 0
     with get_conn() as conn:
         for section, team in pairs:
+            _run(
+                conn,
+                "DELETE FROM trade_corrections WHERE trade_id IN "
+                "(SELECT id FROM trades WHERE section = ? AND team = ?)",
+                (section, team),
+            )
             cur = _run(conn, "DELETE FROM trades WHERE section = ? AND team = ?", (section, team))
             deleted += cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
     return deleted
@@ -253,9 +261,95 @@ def delete_teams(pairs: list[tuple[str, str]]) -> int:
 
 def delete_all_trades() -> None:
     with get_conn() as conn:
+        _run(conn, "DELETE FROM trade_corrections")
         _run(conn, "DELETE FROM trades")
 
 
 def delete_all_teams() -> None:
     with get_conn() as conn:
         _run(conn, "DELETE FROM teams")
+
+
+# --------------------------------------------------------------------------
+# Instructor corrections to an already-submitted trade
+# --------------------------------------------------------------------------
+# Deliberately separate from save_draft/submit_trade: this is the ONLY
+# sanctioned way to change a locked trade's fields (other than end_date,
+# which students themselves can still set). It is never exposed to
+# students -- app.py only calls this from the Instructor view, gated by
+# INSTRUCTOR_CODE -- and every call is logged with a mandatory reason and
+# a before/after diff, so there's a permanent record of what changed and
+# why, visible to both the instructor and that trade's own team.
+
+# Fields eligible for instructor correction. Deliberately excludes
+# identity/audit fields (id, section, team, trade_no, status, timestamps)
+# -- those aren't meant to be hand-edited even by an instructor; if a
+# trade is fundamentally in the wrong place, that's a job for the Reset
+# tools, not a "correction".
+CORRECTABLE_FIELDS = {
+    "submitter_last_name", "submitter_first_name", "submitter_email", "submitter_uni",
+    "trade_title", "total_legs",
+    "leg1_ticker", "leg1_direction", "leg1_exposure_pct",
+    "leg2_ticker", "leg2_direction",
+    "single_leg_gain", "single_leg_loss",
+    "joint_limit_flag", "joint_gain", "joint_loss",
+    "leg1_gain", "leg1_loss", "leg2_gain", "leg2_loss",
+}
+
+
+def correct_trade(trade_id: int, field_updates: dict[str, Any], reason: str) -> dict:
+    """Applies a correction to an already-submitted (or draft) trade's
+    fields, logging a before/after diff and the stated reason to
+    trade_corrections. Only keys in CORRECTABLE_FIELDS are considered;
+    anything else in field_updates is ignored. Only fields whose value
+    actually changes are written and logged -- passing back the same
+    value a field already has is a no-op for that field. Raises ValueError
+    if the trade doesn't exist, no fields actually changed, or reason is
+    blank. Returns the diff that was recorded, as {field: {"old","new"}}.
+    """
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValueError("A reason is required for every correction.")
+
+    current = get_trade(trade_id)
+    if current is None:
+        raise ValueError(f"No trade with id {trade_id}.")
+
+    diff = {}
+    to_write = {}
+    for field, new_value in field_updates.items():
+        if field not in CORRECTABLE_FIELDS:
+            continue
+        old_value = current[field]
+        # Compare as strings to avoid false positives from int/float/None
+        # type differences between what a form submits and what's stored.
+        if str(old_value) == str(new_value):
+            continue
+        diff[field] = {"old": old_value, "new": new_value}
+        to_write[field] = new_value
+
+    if not diff:
+        raise ValueError("Nothing to change -- every value matches what's already stored.")
+
+    now = _now()
+    to_write["updated_at"] = now
+    with get_conn() as conn:
+        set_clause = ", ".join(f"{k} = ?" for k in to_write)
+        values = list(to_write.values()) + [trade_id]
+        _run(conn, f"UPDATE trades SET {set_clause} WHERE id = ?", values)
+        _run(
+            conn,
+            "INSERT INTO trade_corrections (trade_id, corrected_at, reason, changes) VALUES (?, ?, ?, ?)",
+            (trade_id, now, reason, json.dumps(diff)),
+        )
+    return diff
+
+
+def get_corrections(trade_id: int) -> list:
+    """Correction history for one trade, newest first."""
+    with get_conn() as conn:
+        return _run(
+            conn,
+            "SELECT * FROM trade_corrections WHERE trade_id = ? ORDER BY corrected_at DESC",
+            (trade_id,),
+        ).fetchall()
