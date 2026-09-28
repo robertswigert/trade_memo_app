@@ -56,3 +56,18 @@ CREATE TABLE IF NOT EXISTS trades (
 
     UNIQUE(section, team, trade_no)
 );
+
+-- Audit log for instructor-made corrections to an already-submitted trade.
+-- Submitted trades are otherwise locked (only end_date is editable via the
+-- normal student-facing flow); any other post-submission change to a
+-- trade's fields must go through db.correct_trade(), which writes one row
+-- here per correction, alongside the field-level diff and the stated
+-- reason. This is intentionally instructor-only and never exposed to
+-- students as a self-service edit.
+CREATE TABLE IF NOT EXISTS trade_corrections (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    trade_id     INTEGER NOT NULL,
+    corrected_at TEXT NOT NULL,
+    reason       TEXT NOT NULL,
+    changes      TEXT NOT NULL   -- JSON: {"field": {"old": ..., "new": ...}, ...}
+);
