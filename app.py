@@ -10,6 +10,7 @@ Deploy: push this repo to GitHub and point Streamlit Community Cloud
 """
 from __future__ import annotations
 
+import json
 import os
 from datetime import date
 from pathlib import Path
@@ -19,7 +20,7 @@ import streamlit as st
 import db
 import export_blotter
 import team_codes
-from validation import check_trade_tickers
+from validation import check_trade_tickers, check_ticker
 
 BASE_DIR = Path(__file__).resolve().parent
 CBS_LOGO_PATH = BASE_DIR / "assets" / "cbs_hermes_icon.png"
@@ -284,6 +285,17 @@ def submitted_trade_view(trade):
         leg_desc += f"  /  {t['leg2_direction']} {t['leg2_ticker']}"
     st.write(f"**Legs:** {leg_desc}")
 
+    corrections = db.get_corrections(t["id"])
+    if corrections:
+        with st.expander(f"\U0001F4DD This trade was corrected by the instructor ({len(corrections)})", expanded=True):
+            for c in corrections:
+                changes = json.loads(c["changes"])
+                st.caption(c["corrected_at"])
+                st.write(f"**Reason:** {c['reason']}")
+                for field, vals in changes.items():
+                    st.write(f"- `{field}`: ~~{vals['old']}~~ \u2192 **{vals['new']}**")
+                st.markdown("---")
+
     if t["joint_limit_flag"] == "Yes":
         st.write(f"**Risk limits (joint, whole trade):** gain {t['joint_gain']}% / loss {t['joint_loss']}%")
     elif t["total_legs"] == 1:
@@ -421,7 +433,113 @@ def instructor_portal():
         )
 
     st.divider()
-    st.subheader("Team access codes")
+    st.subheader("Correct a trade")
+    st.caption(
+        "For fixing a genuine error in an already-submitted trade (wrong "
+        "ticker, typo, etc.) -- not a way to re-open a trade for the team "
+        "to revise after the fact. Every correction requires a reason and "
+        "is permanently logged, visible to you here and to that trade's "
+        "own team on their submission page."
+    )
+
+    if not trades:
+        st.info("No trades exist yet.")
+    else:
+        def _trade_label(tr):
+            return (
+                f"{tr['section']} / {tr['team']} -- Trade #{tr['trade_no']}: "
+                f"{tr['trade_title'] or '(untitled)'} ({tr['status']})"
+            )
+
+        selected = st.selectbox(
+            "Select a trade", trades, format_func=_trade_label, key="correct_trade_select",
+        )
+
+        if selected:
+            ct = dict(selected)
+            with st.form(key=f"correct_form_{ct['id']}"):
+                st.write(f"**{_trade_label(ct)}**")
+                c1, c2 = st.columns(2)
+                new_title = c1.text_input("Trade title", ct.get("trade_title") or "")
+                new_leg1_ticker = c2.text_input("Leg 1 ticker", ct.get("leg1_ticker") or "")
+
+                c3, c4 = st.columns(2)
+                new_leg1_dir = c3.selectbox(
+                    "Leg 1 direction", ["Long", "Short"],
+                    index=0 if (ct.get("leg1_direction") or "Long") == "Long" else 1,
+                )
+                new_leg1_exp = c4.number_input(
+                    "Leg 1 exposure %", min_value=0.0, max_value=100.0,
+                    value=float(ct.get("leg1_exposure_pct") or 0.0), step=1.0,
+                )
+
+                new_leg2_ticker = new_leg2_dir = None
+                if ct.get("total_legs") == 2:
+                    c5, c6 = st.columns(2)
+                    new_leg2_ticker = c5.text_input("Leg 2 ticker", ct.get("leg2_ticker") or "")
+                    new_leg2_dir = c6.selectbox(
+                        "Leg 2 direction", ["Long", "Short"],
+                        index=0 if (ct.get("leg2_direction") or "Long") == "Long" else 1,
+                        key="correct_leg2dir",
+                    )
+
+                reason = st.text_area(
+                    "Reason for this correction (required)", "",
+                    help="Shown to the team and kept permanently in the audit log.",
+                )
+                apply_clicked = st.form_submit_button("Apply correction", type="primary")
+
+            if apply_clicked:
+                candidate_updates = {
+                    "trade_title": new_title,
+                    "leg1_ticker": new_leg1_ticker,
+                    "leg1_direction": new_leg1_dir,
+                    "leg1_exposure_pct": new_leg1_exp,
+                }
+                if ct.get("total_legs") == 2:
+                    candidate_updates["leg2_ticker"] = new_leg2_ticker
+                    candidate_updates["leg2_direction"] = new_leg2_dir
+
+                if not reason.strip():
+                    st.error("A reason is required before applying a correction.")
+                else:
+                    # Re-validate any ticker being changed, same as a normal
+                    # submission would -- a correction shouldn't be able to
+                    # introduce an invalid ticker that final submission itself
+                    # would have blocked.
+                    tickers_to_check = []
+                    if candidate_updates.get("leg1_ticker") != ct.get("leg1_ticker"):
+                        tickers_to_check.append(candidate_updates["leg1_ticker"])
+                    if ct.get("total_legs") == 2 and candidate_updates.get("leg2_ticker") != ct.get("leg2_ticker"):
+                        tickers_to_check.append(candidate_updates["leg2_ticker"])
+
+                    ticker_problems = [
+                        c for c in (check_ticker(tk) for tk in tickers_to_check)
+                        if c.blocks_submission
+                    ]
+                    if ticker_problems:
+                        for c in ticker_problems:
+                            st.error(f"{c.ticker}: {c.message}")
+                    else:
+                        try:
+                            diff = db.correct_trade(ct["id"], candidate_updates, reason.strip())
+                            st.success(f"Correction applied and logged ({len(diff)} field(s) changed).")
+                            st.rerun()
+                        except ValueError as e:
+                            st.error(str(e))
+
+        # Correction history for the selected trade, regardless of whether
+        # a new one was just applied.
+        history = db.get_corrections(selected["id"]) if selected else []
+        if history:
+            st.markdown(f"**Correction history for this trade ({len(history)}):**")
+            for c in history:
+                changes = json.loads(c["changes"])
+                st.caption(c["corrected_at"])
+                st.write(f"Reason: {c['reason']}")
+                for field, vals in changes.items():
+                    st.write(f"- `{field}`: {vals['old']} \u2192 {vals['new']}")
+                st.markdown("---")
 
     # --- Add missing teams (safe, non-destructive): the action for the
     # common case of adding a couple of teams mid-semester. Existing teams
@@ -433,6 +551,9 @@ def instructor_portal():
 
     existing_pairs_for_add = {(r["section"], r["team"]) for r in db.list_teams()}
     missing_pairs = sorted(roster_pairs_for_add - existing_pairs_for_add)
+
+    st.divider()
+    st.subheader("Team access codes")
 
     with st.expander(
         f"\u2795 Add teams from roster not yet in the database (safe)"
