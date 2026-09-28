@@ -58,3 +58,13 @@ CREATE TABLE IF NOT EXISTS trades (
 
     UNIQUE(section, team, trade_no)
 );
+
+-- Audit log for instructor-made corrections to an already-submitted trade.
+-- See schema_sqlite.sql for the full explanation -- kept identical here.
+CREATE TABLE IF NOT EXISTS trade_corrections (
+    id           SERIAL PRIMARY KEY,
+    trade_id     INTEGER NOT NULL,
+    corrected_at TEXT NOT NULL,
+    reason       TEXT NOT NULL,
+    changes      TEXT NOT NULL
+);
