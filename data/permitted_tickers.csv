@@ -20,6 +20,7 @@
 ES* Index
 NQ* Index
 RTY* Index
+LWE* Index
 GC* Comdty
 GC* COMB Comdty
 SI* Comdty
@@ -43,8 +44,6 @@ FF* Comdty
 SFI* Comdty
 TWE* Comdty
 ER* Comdty
-EWF* Comdty
-ES* Comdty
 
 # --- Common single-name equities used in past trades ---
 JPM US Equity
