@@ -326,6 +326,7 @@ def submitted_trade_view(trade):
     new_end = st.date_input(
         "End date (the only field you can still edit)",
         value=date.fromisoformat(current_end) if current_end else None,
+        key=f"enddate_{t['id']}",
     )
     if st.button("Save end date", key=f"end_{t['id']}"):
         db.set_end_date(t["id"], new_end.isoformat())
